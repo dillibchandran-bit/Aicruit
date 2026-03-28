@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user information and roles.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user's unique ID." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "role": { "type": "string", "enum": ["admin", "candidate", "employer"], "description": "The user's role." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the profile was created." }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Job": {
+      "title": "Job Listing",
+      "description": "Stores job posting details.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Job title." },
+        "company": { "type": "string", "description": "Company name." },
+        "location": { "type": "string", "description": "Job location." },
+        "salary": { "type": "string", "description": "Salary range." },
+        "description": { "type": "string", "description": "Job description." },
+        "type": { "type": "string", "description": "Job type (e.g., Full-time)." },
+        "category": { "type": "string", "description": "Job category." },
+        "postedAt": { "type": "string", "format": "date-time", "description": "When the job was posted." },
+        "employerUid": { "type": "string", "description": "UID of the employer who posted the job." }
+      },
+      "required": ["title", "company", "employerUid"]
+    },
+    "Application": {
+      "title": "Job Application",
+      "description": "Stores applications submitted by candidates.",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string", "description": "ID of the job applied for." },
+        "candidateUid": { "type": "string", "description": "UID of the candidate." },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "accepted", "rejected"], "description": "Application status." },
+        "appliedAt": { "type": "string", "format": "date-time", "description": "When the application was submitted." }
+      },
+      "required": ["jobId", "candidateUid", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/jobs/{jobId}": {
+      "schema": "Job",
+      "description": "Job listings."
+    },
+    "/applications/{applicationId}": {
+      "schema": "Application",
+      "description": "Job applications."
+    }
+  }
+}

@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - role: string (required, ['admin', 'candidate', 'employer'])
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: jobs
+    // Fields:
+    //   - title: string (required)
+    //   - company: string (required)
+    //   - location: string (optional)
+    //   - salary: string (optional)
+    //   - description: string (optional)
+    //   - type: string (optional)
+    //   - category: string (optional)
+    //   - postedAt: timestamp (required)
+    //   - employerUid: string (required)
+    //
+    // Collection: applications
+    // Fields:
+    //   - jobId: string (required)
+    //   - candidateUid: string (required)
+    //   - status: string (required, ['pending', 'reviewed', 'accepted', 'rejected'])
+    //   - appliedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "dillib.chandran@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['admin', 'candidate', 'employer'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidJob(data) {
+      return hasRequiredFields(['title', 'company', 'postedAt', 'employerUid']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.company is string && data.company.size() > 0 && data.company.size() < 100 &&
+             data.postedAt is timestamp &&
+             data.employerUid == request.auth.uid;
+    }
+
+    function isValidApplication(data) {
+      return hasRequiredFields(['jobId', 'candidateUid', 'status', 'appliedAt']) &&
+             data.jobId is string &&
+             data.candidateUid == request.auth.uid &&
+             data.status in ['pending', 'reviewed', 'accepted', 'rejected'] &&
+             data.appliedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /jobs/{jobId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidJob(request.resource.data);
+      allow update: if isAuthenticated() && isValidJob(request.resource.data) && (resource.data.employerUid == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.employerUid == request.auth.uid || isAdmin());
+    }
+
+    match /applications/{applicationId} {
+      allow read: if isAuthenticated() && (resource.data.candidateUid == request.auth.uid || get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.employerUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidApplication(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (resource.data.candidateUid == request.auth.uid && request.resource.data.status == resource.data.status && isValidApplication(request.resource.data)) ||
+        (get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.employerUid == request.auth.uid && hasOnlyAllowedFields(['jobId', 'candidateUid', 'status', 'appliedAt']) && request.resource.data.status in ['reviewed', 'accepted', 'rejected']) ||
+        isAdmin()
+      );
+    }
+  }
+}
